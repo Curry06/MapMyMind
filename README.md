@@ -34,6 +34,9 @@ MapMyMind is an intuitive, web-based idea-mapping tool built with Cytoscape.js. 
 
 Contributions are welcome! Please fork the repository, make your changes, and open a pull request. For major changes, open an issue first to discuss what you’d like to improve.
 
+🙌 Credits
+
+Developed by Curry and the security community. Special thanks to open-source contributors and testers.
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
