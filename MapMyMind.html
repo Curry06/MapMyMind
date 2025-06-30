@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Visual Idea Flow Tool</title>
+  <script src="https://unpkg.com/cytoscape@3.24.0/dist/cytoscape.min.js"></script>
+  <style>
+    html, body {
+      margin: 0; padding: 0; height: 100%;
+      overflow: hidden; font-family: sans-serif;
+    }
+    #cy {
+      width: 100vw; height: 100vh;
+      background: #f0f0f0; display: block;
+    }
+    #topbar {
+      position: fixed; top: 0; left: 0; right: 0;
+      display: flex; justify-content: center; background: #222; color: white;
+      padding: 5px; z-index: 10;
+    }
+    #topbar button {
+      margin: 0 10px; padding: 5px 10px; font-size: 14px; cursor: pointer;
+    }
+    #contextMenu {
+      display: none;
+      position: absolute;
+      background: white;
+      border: 1px solid #ccc;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      z-index: 100;
+      min-width: 150px;
+    }
+    #contextMenu div {
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    #contextMenu div:hover {
+      background: #eee;
+    }
+    .color-option {
+      display: flex;
+      gap: 5px;
+      padding: 5px 10px;
+    }
+    .color-option span {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      display: inline-block;
+      cursor: pointer;
+      border: 1px solid #aaa;
+    }
+  </style>
+</head>
+<body>
+  <div id="topbar">
+    <button id="addNodeBtn">Add Node</button>
+    <button id="connectModeBtn">Connect Mode: OFF</button>
+  </div>
+  <div id="cy"></div>
+  <div id="contextMenu">
+    <div id="renameNode">🖊 Rename</div>
+    <div id="deleteNode">🗑 Delete</div>
+    <div>🎨 Set Color:</div>
+    <div class="color-option">
+      <span style="background:#eeeeee" data-color="#eeeeee"></span>
+      <span style="background:#2ECC40" data-color="#2ECC40"></span>
+      <span style="background:#FF4136" data-color="#FF4136"></span>
+      <span style="background:#FF851B" data-color="#FF851B"></span>
+      <span style="background:#B10DC9" data-color="#B10DC9"></span>
+    </div>
+  </div>
+
+  <script>
+    let cy = cytoscape({
+      container: document.getElementById('cy'),
+      style: [
+        {
+          selector: 'node',
+          style: {
+                'shape': 'roundrectangle',
+                'label': 'data(label)',
+                'background-color': 'data(bgColor)',
+                'color': 'data(textColor)',
+                'font-size': '18px',
+                'font-weight': 'bold',
+                'text-valign': 'center',
+                'text-halign': 'center',
+                'text-outline-width': 0,
+                'width': 'label',
+                'height': 'label',
+                'padding': '14px',
+                'overlay-padding': '6px',
+                'min-zoomed-font-size': 10,
+                'text-wrap': 'wrap',
+                'text-max-width': 200
+
+          }
+        },
+        {
+          selector: 'edge',
+          style: {
+            'width': 2,
+            'line-color': '#ccc',
+            'target-arrow-shape': 'none'
+          }
+        }
+      ],
+      wheelSensitivity: 0.05
+    });
+
+    let connectMode = false;
+    let sourceNode = null;
+
+    document.getElementById('connectModeBtn').onclick = () => {
+      connectMode = !connectMode;
+      document.getElementById('connectModeBtn').innerText = `Connect Mode: ${connectMode ? 'ON' : 'OFF'}`;
+      sourceNode = null;
+    };
+
+    function getCanvasCenter() {
+      const pan = cy.pan();
+      const zoom = cy.zoom();
+      const width = cy.width();
+      const height = cy.height();
+      return {
+        x: (width / 2 - pan.x) / zoom,
+        y: (height / 2 - pan.y) / zoom
+      };
+    }
+
+    document.getElementById('addNodeBtn').onclick = () => {
+      const id = `n${cy.nodes().length}`;
+      const label = prompt('Enter node label:', `Node ${cy.nodes().length}`);
+      if (label) {
+        const center = getCanvasCenter();
+        cy.add({
+          group: 'nodes',
+          data: {
+            id: id,
+            label: label,
+            bgColor: '#eeeeee',
+            textColor: '#333333'
+          },
+          position: { x: center.x, y: center.y }
+        });
+        saveState();
+      }
+    };
+
+    cy.on('tap', 'node', (evt) => {
+      if (connectMode) {
+        if (!sourceNode) {
+          sourceNode = evt.target;
+        } else {
+          cy.add({
+            group: 'edges',
+            data: { source: sourceNode.id(), target: evt.target.id() }
+          });
+          sourceNode = null;
+          saveState();
+        }
+      }
+    });
+
+    cy.on('tap', 'edge', (evt) => {
+      const edge = evt.target;
+      const source = edge.source();
+      const target = edge.target();
+      const midpoint = {
+        x: (source.position('x') + target.position('x')) / 2,
+        y: (source.position('y') + target.position('y')) / 2
+      };
+
+      const id = `n${cy.nodes().length}`;
+      const label = prompt('Enter label for new node between:', `Node ${cy.nodes().length}`);
+      if (!label) return;
+
+      cy.remove(edge);
+
+      cy.add([
+        {
+          group: 'nodes',
+          data: { id, label, bgColor: '#eeeeee', textColor: '#333333' },
+          position: midpoint
+        },
+        { group: 'edges', data: { source: source.id(), target: id } },
+        { group: 'edges', data: { source: id, target: target.id() } }
+      ]);
+
+      saveState();
+    });
+
+    let currentNode = null;
+
+    cy.on('cxttap', 'node', function(evt) {
+      currentNode = evt.target;
+      const e = evt.originalEvent;
+      document.getElementById('contextMenu').style.left = e.clientX + 'px';
+      document.getElementById('contextMenu').style.top = e.clientY + 'px';
+      document.getElementById('contextMenu').style.display = 'block';
+    });
+
+    cy.on('tap', () => {
+      document.getElementById('contextMenu').style.display = 'none';
+    });
+
+    document.getElementById('renameNode').onclick = () => {
+      if (currentNode) {
+        const newLabel = prompt('Enter new label:', currentNode.data('label'));
+        if (newLabel) {
+          currentNode.data('label', newLabel);
+          saveState();
+        }
+      }
+    };
+
+    document.getElementById('deleteNode').onclick = () => {
+      if (currentNode) {
+        cy.remove(currentNode);
+        saveState();
+      }
+    };
+
+    document.querySelectorAll('.color-option span').forEach(span => {
+      span.addEventListener('click', () => {
+        const color = span.getAttribute('data-color');
+        if (currentNode && color) {
+          currentNode.data('bgColor', color);
+          currentNode.style('background-color', color);
+          saveState();
+        }
+      });
+    });
+
+    cy.on('pan zoom', () => {
+      saveState();
+    });
+
+    cy.on('dragfree', 'node', () => {
+      saveState();
+    });
+
+    function saveState() {
+      const state = {
+        elements: cy.elements().jsons(),
+        pan: cy.pan(),
+        zoom: cy.zoom()
+      };
+      localStorage.setItem('cyData', JSON.stringify(state));
+    }
+
+    function loadState() {
+      const raw = localStorage.getItem('cyData');
+      if (!raw) return;
+
+      try {
+        const saved = JSON.parse(raw);
+        cy.elements().remove();
+        cy.add(saved.elements || []);
+        cy.pan(saved.pan || { x: 0, y: 0 });
+        cy.zoom(saved.zoom || 1);
+      } catch (e) {
+        console.warn('Error loading saved data:', e);
+      }
+    }
+
+    loadState();
+  </script>
+</body>
+</html>
