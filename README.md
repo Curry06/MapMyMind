@@ -17,7 +17,7 @@ MapMyMind is an intuitive, web-based idea-mapping tool built with Cytoscape.js. 
 1. **Clone the repository**
    ```bash
    git clone https://github.com/yourusername/FlowCanvas.git
-   cd FlowCanvas
+   cd MapMyMind
    ```
 2. **Open** `index.html` in your favorite web browser.
 
