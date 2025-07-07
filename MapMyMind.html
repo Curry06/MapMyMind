@@ -15,7 +15,7 @@
     }
     #topbar {
       position: fixed; top: 0; left: 0; right: 0;
-      display: flex; justify-content: center; background: #222; color: white;
+      display: flex; justify-content: center; background: #222; color: pink;
       padding: 5px; z-index: 10;
     }
     #topbar button {
@@ -24,7 +24,7 @@
     #contextMenu {
       display: none;
       position: absolute;
-      background: white;
+      background: pink;
       border: 1px solid #ccc;
       box-shadow: 0 2px 5px rgba(0,0,0,0.2);
       z-index: 100;
@@ -55,11 +55,14 @@
   <div id="topbar">
     <button id="addNodeBtn">Add Node</button>
     <button id="connectModeBtn">Connect Mode: OFF</button>
+    <button id="chooseFileBtn">💾 Save File</button>
+    <button id="loadFileBtn">📂 Load File</button>
+    <button id="manualSaveBtn">💾 Save Now</button>
   </div>
   <div id="cy"></div>
   <div id="contextMenu">
-    <div id="renameNode">🖊 Rename</div>
-    <div id="deleteNode">🗑 Delete</div>
+    <div id="renameNode">🖊️ Rename</div>
+    <div id="deleteNode">🗑️ Delete</div>
     <div>🎨 Set Color:</div>
     <div class="color-option">
       <span style="background:#eeeeee" data-color="#eeeeee"></span>
@@ -77,31 +80,32 @@
         {
           selector: 'node',
           style: {
-                'shape': 'roundrectangle',
-                'label': 'data(label)',
-                'background-color': 'data(bgColor)',
-                'color': 'data(textColor)',
-                'font-size': '18px',
-                'font-weight': 'bold',
-                'text-valign': 'center',
-                'text-halign': 'center',
-                'text-outline-width': 0,
-                'width': 'label',
-                'height': 'label',
-                'padding': '14px',
-                'overlay-padding': '6px',
-                'min-zoomed-font-size': 10,
-                'text-wrap': 'wrap',
-                'text-max-width': 200
-
+            'shape': 'roundrectangle',
+            'label': 'data(label)',
+            'background-color': 'data(bgColor)',
+            'color': 'data(textColor)',
+            'font-size': '18px',
+            'font-weight': 'bold',
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'text-outline-width': 0,
+            'width': 'label',
+            'height': 'label',
+            'padding': '14px',
+            'overlay-padding': '6px',
+            'min-zoomed-font-size': 10,
+            'text-wrap': 'wrap',
+            'text-max-width': 200
           }
         },
         {
           selector: 'edge',
           style: {
-            'width': 2,
-            'line-color': '#ccc',
-            'target-arrow-shape': 'none'
+            'width': 3,
+            'line-color': '#555',
+            'curve-style': 'bezier',
+            'target-arrow-shape': 'triangle',
+            'target-arrow-color': '#555'
           }
         }
       ],
@@ -110,12 +114,89 @@
 
     let connectMode = false;
     let sourceNode = null;
+    let currentElement = null;
+    let fileHandle = null;
 
+    // Toggle connect mode
     document.getElementById('connectModeBtn').onclick = () => {
       connectMode = !connectMode;
       document.getElementById('connectModeBtn').innerText = `Connect Mode: ${connectMode ? 'ON' : 'OFF'}`;
       sourceNode = null;
     };
+
+    // Save file (pick or create file)
+    document.getElementById('chooseFileBtn').onclick = async () => {
+      try {
+        fileHandle = await window.showSaveFilePicker({
+          types: [{
+            description: 'JSON Files',
+            accept: { 'application/json': ['.json'] }
+          }]
+        });
+        await writeToFile();
+      } catch (err) {
+        console.warn('File save picker cancelled or failed:', err);
+      }
+    };
+
+    // Manual save
+    document.getElementById('manualSaveBtn').onclick = async () => {
+      if (!fileHandle) {
+        alert("⚠️ No file selected. Please click 'Save File' first.");
+        return;
+      }
+      await writeToFile();
+      alert("✅ Saved successfully.");
+    };
+
+    // Load from file
+    document.getElementById('loadFileBtn').onclick = async () => {
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          types: [{
+            description: 'JSON Files',
+            accept: { 'application/json': ['.json'] }
+          }],
+          multiple: false
+        });
+
+        const file = await handle.getFile();
+        const content = await file.text();
+        const parsed = JSON.parse(content);
+
+        cy.elements().remove();
+        if (parsed.elements) cy.add(parsed.elements);
+        if (parsed.pan) cy.pan(parsed.pan);
+        if (parsed.zoom) cy.zoom(parsed.zoom);
+
+        console.log("Graph loaded from file.");
+      } catch (err) {
+        console.warn("File load cancelled or failed:", err);
+      }
+    };
+
+    // Write to selected file
+    async function writeToFile() {
+      if (!fileHandle) return;
+      try {
+        const writable = await fileHandle.createWritable();
+        const state = {
+          elements: cy.elements().jsons(),
+          pan: cy.pan(),
+          zoom: cy.zoom()
+        };
+        await writable.write(JSON.stringify(state, null, 2));
+        await writable.close();
+        console.log("Saved to file.");
+      } catch (err) {
+        console.error("Failed to write file:", err);
+      }
+    }
+
+    // Auto save on actions
+    function saveState() {
+      writeToFile();
+    }
 
     function getCanvasCenter() {
       const pan = cy.pan();
@@ -128,6 +209,7 @@
       };
     }
 
+    // Add node
     document.getElementById('addNodeBtn').onclick = () => {
       const id = `n${cy.nodes().length}`;
       const label = prompt('Enter node label:', `Node ${cy.nodes().length}`);
@@ -147,6 +229,7 @@
       }
     };
 
+    // Edge connect
     cy.on('tap', 'node', (evt) => {
       if (connectMode) {
         if (!sourceNode) {
@@ -162,6 +245,7 @@
       }
     });
 
+    // Insert node between edge
     cy.on('tap', 'edge', (evt) => {
       const edge = evt.target;
       const source = edge.source();
@@ -190,81 +274,57 @@
       saveState();
     });
 
-    let currentNode = null;
-
-    cy.on('cxttap', 'node', function(evt) {
-      currentNode = evt.target;
+    // Right click menu
+    cy.on('cxttap', 'node, edge', function(evt) {
+      currentElement = evt.target;
       const e = evt.originalEvent;
       document.getElementById('contextMenu').style.left = e.clientX + 'px';
       document.getElementById('contextMenu').style.top = e.clientY + 'px';
       document.getElementById('contextMenu').style.display = 'block';
     });
 
+    // Hide context menu
     cy.on('tap', () => {
       document.getElementById('contextMenu').style.display = 'none';
     });
 
+    // Rename
     document.getElementById('renameNode').onclick = () => {
-      if (currentNode) {
-        const newLabel = prompt('Enter new label:', currentNode.data('label'));
+      if (currentElement && currentElement.isNode && currentElement.isNode()) {
+        const newLabel = prompt('Enter new label:', currentElement.data('label'));
         if (newLabel) {
-          currentNode.data('label', newLabel);
+          currentElement.data('label', newLabel);
           saveState();
         }
       }
     };
 
+    // Delete
     document.getElementById('deleteNode').onclick = () => {
-      if (currentNode) {
-        cy.remove(currentNode);
+      if (currentElement) {
+        cy.remove(currentElement);
         saveState();
       }
     };
 
+    // Color change
     document.querySelectorAll('.color-option span').forEach(span => {
       span.addEventListener('click', () => {
         const color = span.getAttribute('data-color');
-        if (currentNode && color) {
-          currentNode.data('bgColor', color);
-          currentNode.style('background-color', color);
+        if (currentElement && currentElement.isNode && currentElement.isNode()) {
+          currentElement.data('bgColor', color);
+          currentElement.style({
+            'background-color': color,
+            'text-outline-color': color
+          });
           saveState();
         }
       });
     });
 
-    cy.on('pan zoom', () => {
-      saveState();
-    });
-
-    cy.on('dragfree', 'node', () => {
-      saveState();
-    });
-
-    function saveState() {
-      const state = {
-        elements: cy.elements().jsons(),
-        pan: cy.pan(),
-        zoom: cy.zoom()
-      };
-      localStorage.setItem('cyData', JSON.stringify(state));
-    }
-
-    function loadState() {
-      const raw = localStorage.getItem('cyData');
-      if (!raw) return;
-
-      try {
-        const saved = JSON.parse(raw);
-        cy.elements().remove();
-        cy.add(saved.elements || []);
-        cy.pan(saved.pan || { x: 0, y: 0 });
-        cy.zoom(saved.zoom || 1);
-      } catch (e) {
-        console.warn('Error loading saved data:', e);
-      }
-    }
-
-    loadState();
+    // Save on zoom/pan/drag
+    cy.on('pan zoom', saveState);
+    cy.on('dragfree', 'node', saveState);
   </script>
 </body>
 </html>
