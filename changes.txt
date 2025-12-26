@@ -1,0 +1,19 @@
+shapes ( circle, square, )   done 
+(resize as per the name of the node)
+
+
+delete (functionality)    done 
+(you can delete the firstly created nodes and add another node later on)
+
+line color    done
+
+
+line type   done
+( solid, Dashed, dotted )
+
+node default color  done 
+
+save file functionality (overwrite the selected file after changes)
+(confirmed the workflow for file save)
+
+autosave F5
